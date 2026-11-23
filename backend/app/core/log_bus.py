@@ -43,7 +43,7 @@ class LogBus:
 
     publish() may be called from any thread (agent code frequently runs
     inside a threadpool via asyncio.to_thread since the underlying OpenAI /
-    requests / modal calls are all synchronous and blocking). To safely hand
+    requests / PyTorch calls are all synchronous and blocking). To safely hand
     events to asyncio.Queue objects that are consumed from the event loop
     thread, we schedule the put via call_soon_threadsafe on the loop that
     was active when the bus was initialized.

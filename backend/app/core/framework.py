@@ -1,5 +1,5 @@
 """
-DealScoutEngine: ported from week8/deal_agent_framework.py's DealAgentFramework.
+PricerEngine: ported from week8/deal_agent_framework.py's DealAgentFramework.
 
 Behavioral changes from the original, per the migration plan:
   - The planner is AutonomousPlanningAgent (tool-calling), not the classic
@@ -48,7 +48,7 @@ def init_logging() -> None:
     root.addHandler(handler)
 
 
-class DealScoutEngine:
+class PricerEngine:
     def __init__(self) -> None:
         self.client = chromadb.PersistentClient(path=settings.products_vectorstore_path)
         self.collection = self.client.get_or_create_collection("products")
@@ -82,19 +82,23 @@ class DealScoutEngine:
             memory.append(AgentOpportunity(deal=deal, estimate=row.estimate, discount=row.discount))
         return memory
 
-    async def run(self, session: AsyncSession) -> Optional[Opportunity]:
+    async def run(
+        self, session: AsyncSession, search_query: str = ""
+    ) -> Optional[Opportunity]:
         """
         Run one planning cycle (equivalent to the original DealAgentFramework.run()),
         and if the planner surfaces an Opportunity, persist it to the database.
 
         The planner's `plan()` call is synchronous and blocking (OpenAI, requests,
-        and remote Modal calls), so it's run in a thread via asyncio.to_thread to
+        and local model inference), so it's run in a thread via asyncio.to_thread to
         avoid blocking the event loop.
         """
         self.init_agents_as_needed()
         memory = await self._load_memory(session)
         logging.info("Kicking off Planning Agent")
-        result = await asyncio.to_thread(self.planner.plan, memory)
+        result = await asyncio.to_thread(
+            self.planner.plan, memory, search_query=search_query
+        )
         logging.info(f"Planning Agent has completed and returned: {result}")
         if result:
             opportunity = Opportunity(

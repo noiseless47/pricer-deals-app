@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.core.framework import DealScoutEngine, init_logging
+from app.core.framework import PricerEngine, init_logging
 from app.core.log_bus import WebSocketLogHandler, log_bus
 from app.db import init_db
 from app.routers import messages, opportunities, scan, ws
@@ -14,7 +14,7 @@ from app.routers import messages, opportunities, scan, ws
 # created lazily on first use, via engine.init_agents_as_needed()), so a
 # single instance is shared across all requests - matches the original's
 # lazy-singleton pattern.
-engine = DealScoutEngine()
+engine = PricerEngine()
 
 
 @asynccontextmanager
@@ -27,7 +27,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="DealScout", lifespan=lifespan)
+app = FastAPI(title="Pricer", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

@@ -13,12 +13,8 @@ secrets = [modal.Secret.from_name("huggingface-secret")]
 
 GPU = "T4"
 BASE_MODEL = "meta-llama/Llama-3.2-3B"
-PROJECT_NAME = "price"
-HF_USER = "ed-donner"  # your HF name here! Or use mine if you just want to reproduce my results.
-RUN_NAME = "2025-11-28_18.47.07"
-PROJECT_RUN_NAME = f"{PROJECT_NAME}-{RUN_NAME}"
-REVISION = "b19c8bfea3b6ff62237fbb0a8da9779fc12cefbd"
-FINETUNED_MODEL = f"{HF_USER}/{PROJECT_RUN_NAME}"
+FINETUNED_MODEL = "ed-donner/price-2025-11-30_15.10.55-lite"
+ADAPTER_REVISION = "259f6f974c511cd87c0b7af78e894e0507a87ecf"
 CACHE_DIR = "/cache"
 
 # Change this to 1 if you want Modal to be always running, otherwise it will go cold after 2 mins
@@ -61,7 +57,7 @@ class Pricer:
             BASE_MODEL, quantization_config=quant_config, device_map="auto"
         )
         self.fine_tuned_model = PeftModel.from_pretrained(
-            self.base_model, FINETUNED_MODEL, revision=REVISION
+            self.base_model, FINETUNED_MODEL, revision=ADAPTER_REVISION
         )
 
     @modal.method()

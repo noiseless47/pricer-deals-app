@@ -1,23 +1,29 @@
 interface RunScanButtonProps {
   isRunning: boolean
   onRun: () => void
-  error: string | null
 }
 
-export default function RunScanButton({ isRunning, onRun, error }: RunScanButtonProps) {
+export default function RunScanButton({ isRunning, onRun }: RunScanButtonProps) {
   return (
     <div className="run-scan">
-      <button className="run-scan-button" onClick={onRun} disabled={isRunning}>
+      <button
+        className="run-scan-button"
+        onClick={onRun}
+        disabled={isRunning}
+        aria-busy={isRunning}
+      >
         {isRunning ? (
           <>
             <span className="spinner" aria-hidden="true" />
-            Scan running...
+            Scan in progress
           </>
         ) : (
-          'Run Scan'
+          <>
+            <span aria-hidden="true">↗</span>
+            Start a deal scan
+          </>
         )}
       </button>
-      {error && <span className="run-scan-error">{error}</span>}
     </div>
   )
 }

@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # backend/app/config.py -> backend/app -> backend -> repo root
@@ -10,9 +11,8 @@ class Settings(BaseSettings):
     """
     Application configuration, loaded from environment variables / a .env file.
 
-    Secrets (openai_api_key, anthropic_api_key) are NOT provided here -
-    populate them in the repo-root .env, which is intentionally not committed
-    to source control.
+    API keys and the optional Hugging Face token are loaded from the repo-root
+    .env, which is intentionally not committed to source control.
     """
 
     model_config = SettingsConfigDict(
@@ -20,11 +20,12 @@ class Settings(BaseSettings):
     )
 
     openai_api_key: str
-    anthropic_api_key: str
+    groq_api_key: SecretStr
+    hf_token: SecretStr | None = None
 
     products_vectorstore_path: str = "data/products_vectorstore"
     dnn_weights_path: str = "data/deep_neural_network.pth"
-    database_url: str = "sqlite+aiosqlite:///./data/dealscout.db"
+    database_url: str = "sqlite+aiosqlite:///./data/pricer.db"
     frontend_origin: str = "http://localhost:5173"
 
 

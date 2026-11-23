@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-DealScout is an autonomous multi-agent deal-hunting system: it scans deal RSS feeds, estimates the "true value" of each item using three independent pricing strategies, and records an alert message (crafted by Claude, stored in SQLite, shown in the frontend's Messages tab) when it finds a real bargain. It's a standalone extraction of the "Price is Right" capstone from Ed Donner's *LLM Engineering* course (weeks 6-8), rebuilt as a FastAPI backend + React frontend instead of the original single-process Gradio/notebook app.
+Pricer is an autonomous multi-agent deal-hunting system: it scans deal RSS feeds, estimates the "true value" of each item using three independent pricing strategies, and records an alert message (crafted by Groq, stored in SQLite, shown in the frontend's Messages tab) when it finds a real bargain. It's a standalone extraction of the "Price is Right" capstone from Ed Donner's *LLM Engineering* course (weeks 6-8), rebuilt as a FastAPI backend + React frontend instead of the original single-process Gradio/notebook app.
 
 FastAPI backend (`backend/`) + React/TypeScript frontend (`frontend/`), talking over REST + a WebSocket log stream. No test suite exists in this repo yet.
 
@@ -18,7 +18,7 @@ uv sync            # install deps into the root .venv (Python 3.12.12)
 uv run run.py       # run dev server (equivalent to: uv run uvicorn app.main:app --reload --app-dir backend)
 ./dev.sh            # run backend + frontend together (Ctrl+C stops both)
 ```
-Requires a repo-root `.env` (copy from `.env.example`) with `OPENAI_API_KEY` and `ANTHROPIC_API_KEY`, and a Modal account authenticated (`modal token set`) with the `pricer-service` app deployed.
+Requires a repo-root `.env` (copy from `.env.example`) with `OPENAI_API_KEY` and `GROQ_API_KEY`, and a Modal account authenticated (`modal token set`) with the `pricer-service` app deployed.
 
 ### Frontend (`frontend/`, uses `npm`)
 ```bash
@@ -40,8 +40,8 @@ Scan (RSS feeds)  →  AutonomousPlanningAgent (tool-calling LLM)
 ```
 
 ### Backend layout (`backend/app/`)
-- `main.py` — FastAPI app + lifespan setup. A single `DealScoutEngine` instance (`engine`) is created at import time and shared across all requests (agents inside it are lazily initialized on first use via `init_agents_as_needed()`, since they're expensive to construct — loading models, connecting to Chroma/Modal, etc).
-- `core/framework.py` — `DealScoutEngine`, ported from the original course's `deal_agent_framework.py`. Owns the Chroma client/collection and the `AutonomousPlanningAgent`. `run()` reconstructs planner memory from persisted `Opportunity` rows, runs one planning cycle in a thread (`asyncio.to_thread`, since the planner's OpenAI/requests/Modal calls are synchronous/blocking), and persists any resulting Opportunity plus the Messaging Agent's crafted alert text (an `AgentMessage` row, read from `planner.message` — sync agent code never touches the async DB session).
+- `main.py` — FastAPI app + lifespan setup. A single `PricerEngine` instance (`engine`) is created at import time and shared across all requests (agents inside it are lazily initialized on first use via `init_agents_as_needed()`, since they're expensive to construct — loading models, connecting to Chroma/Modal, etc).
+- `core/framework.py` — `PricerEngine`, ported from the original course's `deal_agent_framework.py`. Owns the Chroma client/collection and the `AutonomousPlanningAgent`. `run()` reconstructs planner memory from persisted `Opportunity` rows, runs one planning cycle in a thread (`asyncio.to_thread`, since the planner's OpenAI/requests/Modal calls are synchronous/blocking), and persists any resulting Opportunity plus the Messaging Agent's crafted alert text (an `AgentMessage` row, read from `planner.message` — sync agent code never touches the async DB session).
 - `core/log_bus.py` — pub/sub `LogBus` that lets agent code (running in worker threads) publish structured log events, consumed by WebSocket clients. `WebSocketLogHandler` is a `logging.Handler` that taps every `logging.info(...)` call and republishes it; agents identify themselves via a `[Agent Name] message` prefix convention (see `agents/base.py Agent.log()`), which `log_bus.parse_log_message()` parses back out.
 - `agents/` — ported near-verbatim from the course repo:
   - `base.py` — `Agent` superclass; just provides colored `self.log()`.
@@ -53,13 +53,13 @@ Scan (RSS feeds)  →  AutonomousPlanningAgent (tool-calling LLM)
   - `frontier_agent.py` — RAG: embeds the description (SentenceTransformer), queries the Chroma `products` collection for 5 similar items, asks an OpenAI model to estimate price given that context.
   - `neural_network_agent.py` / `deep_neural_network.py` — local PyTorch DNN inference using the repo-root `data/deep_neural_network.pth`.
   - `preprocessor.py` — rewrites/normalizes a product description via `litellm.completion` (gpt-5.1, `reasoning_effort="none"`) before pricing.
-  - `messaging_agent.py` — crafts an alert message via `litellm.completion` (Claude) and returns the text; persistence happens in `core/framework.py` (no Pushover — replaced by the in-app messages table).
-- `routers/` — thin FastAPI routers: `opportunities.py` (CRUD reads on persisted opportunities), `scan.py` (kicks off one `DealScoutEngine.run()` cycle as a `BackgroundTasks` job and publishes a `run_complete` event on the log bus when done — not returned synchronously, since a run can take a while), `messages.py` (reads persisted `AgentMessage` alert rows), `ws.py` (`/ws/logs` — streams `log_bus` events to connected clients).
+  - `messaging_agent.py` — crafts an alert message via `litellm.completion` (Groq) and returns the text; persistence happens in `core/framework.py` (no Pushover — replaced by the in-app messages table).
+- `routers/` — thin FastAPI routers: `opportunities.py` (CRUD reads on persisted opportunities), `scan.py` (kicks off one `PricerEngine.run()` cycle as a `BackgroundTasks` job and publishes a `run_complete` event on the log bus when done — not returned synchronously, since a run can take a while), `messages.py` (reads persisted `AgentMessage` alert rows), `ws.py` (`/ws/logs` — streams `log_bus` events to connected clients).
 - `models.py` — SQLModel `Opportunity` and `AgentMessage` (DB tables) with `OpportunityRead`/`AgentMessageRead` response schemas. `Opportunity` is distinct from `agents/deals.py`'s pydantic `Opportunity`, which is the agent-facing/in-memory shape; `core/framework.py` converts between the two.
 - `config.py` — `pydantic-settings` `Settings`, loaded from the repo-root `.env` (resolved via an absolute path computed from `config.py`'s own location, so it works regardless of CWD; not committed). Also holds `frontend_origin`, used for CORS.
-- `db.py` — async SQLModel/SQLAlchemy engine + session factory (SQLite by default, repo-root `data/dealscout.db`).
+- `db.py` — async SQLModel/SQLAlchemy engine + session factory (SQLite by default, repo-root `data/pricer.db`).
 
-Data artifacts (repo-root `data/products_vectorstore/`, `data/*.pth`, `data/dealscout.db`) are gitignored — the vectorstore/weights are normally copied from the course repo rather than regenerated; `scripts/build_vectorstore.py` exists only to rebuild the vector store from scratch if needed (run from repo root: `uv run python backend/scripts/build_vectorstore.py`). `modal_app/pricer_service.py` defines the remote Modal app/class that `specialist_agent.py` calls into — it's deployed separately (`modal deploy`) and isn't run as part of the FastAPI backend.
+Data artifacts (repo-root `data/products_vectorstore/`, `data/*.pth`, `data/pricer.db`) are gitignored — the vectorstore/weights are normally copied from the course repo rather than regenerated; `scripts/build_vectorstore.py` exists only to rebuild the vector store from scratch if needed (run from repo root: `uv run python backend/scripts/build_vectorstore.py`). `modal_app/pricer_service.py` defines the remote Modal app/class that `specialist_agent.py` calls into — it's deployed separately (`modal deploy`) and isn't run as part of the FastAPI backend.
 
 ### Frontend layout (`frontend/src/`)
 - `api.ts` — all backend I/O: REST fetch helpers (`fetchOpportunities`, `runScan`, `fetchMessages`) hitting `API_BASE` (from `VITE_API_BASE`, default `http://localhost:8000`), plus `connectLogSocket` for the log WebSocket (`WS_URL` derived from `API_BASE`). Types here (`Opportunity`, `AgentMessage`, `LogEvent`, `RunCompleteEvent`) mirror the backend's Pydantic/SQLModel schemas.
@@ -73,5 +73,5 @@ Data artifacts (repo-root `data/products_vectorstore/`, `data/*.pth`, `data/deal
 
 - Agent code (`app/agents/**`) is largely a direct port of the original notebook-based course project, kept close to its original form; when modifying it, preserve the `Agent.log()` `[Agent Name] message` convention since `log_bus.py` depends on parsing it.
 - The two `Opportunity` types (`app.models.Opportunity` = DB row, `app.agents.deals.Opportunity` = agent-facing pydantic model) are not interchangeable — conversions happen explicitly in `core/framework.py`.
-- LLM calls are split across providers/SDKs depending on the agent: `openai` SDK directly in `scanner_agent.py`/`frontier_agent.py`/`autonomous_planning_agent.py`, `litellm.completion` in `preprocessor.py` (gpt-5.1) and `messaging_agent.py` (Claude).
-- Planner and pricing calls are synchronous/blocking (OpenAI SDK, `requests`, Modal `.remote()`), so anything invoking them from an async FastAPI path must go through `asyncio.to_thread` (see `DealScoutEngine.run`) to avoid blocking the event loop.
+- LLM calls are split across providers/SDKs depending on the agent: `openai` SDK directly in `scanner_agent.py`/`frontier_agent.py`/`autonomous_planning_agent.py`, `litellm.completion` in `preprocessor.py` (gpt-5.1) and `messaging_agent.py` (Groq).
+- Planner and pricing calls are synchronous/blocking (OpenAI SDK, `requests`, Modal `.remote()`), so anything invoking them from an async FastAPI path must go through `asyncio.to_thread` (see `PricerEngine.run`) to avoid blocking the event loop.

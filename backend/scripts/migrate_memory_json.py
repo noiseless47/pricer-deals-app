@@ -1,5 +1,5 @@
 """
-One-off migration script: seeds the DealScout SQLite database from the
+One-off migration script: seeds the Pricer SQLite database from the
 memory.json file used by the original week8 Gradio app (JSON-file
 persistence), so history captured during course development isn't lost.
 

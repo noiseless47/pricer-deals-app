@@ -1,8 +1,9 @@
 import logging
 
 from fastapi import APIRouter, BackgroundTasks, Request, status
+from pydantic import BaseModel, Field
 
-from app.core.framework import DealScoutEngine
+from app.core.framework import PricerEngine
 from app.core.log_bus import log_bus
 from app.db import async_session_maker
 from app.models import OpportunityRead
@@ -10,9 +11,13 @@ from app.models import OpportunityRead
 router = APIRouter()
 
 
-async def _run_scan_job(engine: DealScoutEngine) -> None:
+class ScanRequest(BaseModel):
+    query: str = Field(default="", max_length=120)
+
+
+async def _run_scan_job(engine: PricerEngine, query: str = "") -> None:
     """
-    Run one DealScoutEngine planning cycle in the background, persist the
+    Run one PricerEngine planning cycle in the background, persist the
     result (handled inside engine.run), and publish a final run_complete
     event on the log bus so WebSocket clients learn the outcome without
     polling.
@@ -20,7 +25,7 @@ async def _run_scan_job(engine: DealScoutEngine) -> None:
     opportunity = None
     async with async_session_maker() as session:
         try:
-            opportunity = await engine.run(session)
+            opportunity = await engine.run(session, search_query=query)
         except Exception:
             logging.exception("Scan run failed")
 
@@ -31,13 +36,18 @@ async def _run_scan_job(engine: DealScoutEngine) -> None:
 
 
 @router.post("/scan/run", status_code=status.HTTP_202_ACCEPTED)
-async def run_scan(request: Request, background_tasks: BackgroundTasks):
+async def run_scan(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    payload: ScanRequest | None = None,
+):
     """
     Kick off one planning cycle (RSS scan + pricing + possible notification)
     as a background job, since it can take a while. The eventual result is
     both persisted to the DB and broadcast on the log bus (ws/logs) as a
     run_complete event.
     """
-    engine: DealScoutEngine = request.app.state.engine
-    background_tasks.add_task(_run_scan_job, engine)
-    return {"status": "started"}
+    engine: PricerEngine = request.app.state.engine
+    query = (payload.query if payload else "").strip()
+    background_tasks.add_task(_run_scan_job, engine, query)
+    return {"status": "started", "query": query}

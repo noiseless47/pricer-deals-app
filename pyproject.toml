@@ -1,7 +1,7 @@
 [project]
-name = "dealscout"
+name = "pricer"
 version = "0.1.0"
-description = "Add your description here"
+description = "GPU-powered product price estimation and deal discovery"
 readme = "README.md"
 requires-python = ">=3.12.12"
 dependencies = [
@@ -23,6 +23,16 @@ dependencies = [
     "sentence-transformers>=5.6.1",
     "sqlmodel>=0.0.39",
     "torch>=2.13.0",
+    "transformers>=4.57.2,<5.0.0",
+    "peft>=0.18.0,<0.19.0",
+    "accelerate>=1.14.0,<2.0.0",
     "uvicorn[standard]>=0.52.1",
     "websockets>=17.0.1",
+]
+
+[project.optional-dependencies]
+data = [
+    "datasets>=4.4.0,<5.0.0",
+    "huggingface-hub>=0.34.0,<1.0.0",
+    "tqdm>=4.70.0",
 ]

@@ -55,8 +55,12 @@ export function fetchOpportunity(id: number): Promise<Opportunity> {
   return fetchJson<Opportunity>(`/api/opportunities/${id}`)
 }
 
-export function runScan(): Promise<RunScanResponse> {
-  return fetchJson<RunScanResponse>('/api/scan/run', { method: 'POST' })
+export function runScan(query = ''): Promise<RunScanResponse> {
+  return fetchJson<RunScanResponse>('/api/scan/run', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query }),
+  })
 }
 
 export function fetchMessages(): Promise<AgentMessage[]> {

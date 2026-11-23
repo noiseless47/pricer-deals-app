@@ -23,6 +23,7 @@ class AutonomousPlanningAgent(Agent):
         self.messenger = MessagingAgent()
         self.openai = OpenAI()
         self.memory = None
+        self.search_query = ""
         self.opportunity = None
         self.message = None
         self.log("Autonomous Planning Agent is ready")
@@ -32,7 +33,7 @@ class AutonomousPlanningAgent(Agent):
         Run the tool to scan
         """
         self.log("Autonomous Planning agent is calling scanner")
-        results = self.scanner.scan(memory=self.memory)
+        results = self.scanner.scan(memory=self.memory, search_query=self.search_query)
         return results.model_dump_json() if results else "No deals found"
 
     def estimate_true_value(self, description: str) -> str:
@@ -155,7 +156,9 @@ class AutonomousPlanningAgent(Agent):
         {"role": "user", "content": user_message},
     ]
 
-    def plan(self, memory: List[str] = []) -> Optional[Opportunity]:
+    def plan(
+        self, memory: List[str] = [], search_query: str = ""
+    ) -> Optional[Opportunity]:
         """
         Run the full workflow, providing the LLM with tools to surface scraped deals to the user
         :param memory: a list of URLs that have been surfaced in the past
@@ -163,9 +166,16 @@ class AutonomousPlanningAgent(Agent):
         """
         self.log("Autonomous Planning Agent is kicking off a run")
         self.memory = memory
+        self.search_query = search_query.strip()
         self.opportunity = None
         self.message = None
-        messages = self.messages[:]
+        messages = [message.copy() for message in self.messages]
+        if self.search_query:
+            messages[1]["content"] = (
+                f"Focus on deals matching this product search: {self.search_query!r}. "
+                "The scanner filters RSS titles and summaries for this query.\n\n"
+                + messages[1]["content"]
+            )
         done = False
         while not done:
             response = self.openai.chat.completions.create(

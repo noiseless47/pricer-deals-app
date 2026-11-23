@@ -35,14 +35,17 @@ class ScannerAgent(Agent):
         self.openai = OpenAI()
         self.log("Scanner Agent is ready")
 
-    def fetch_deals(self, memory) -> List[ScrapedDeal]:
+    def fetch_deals(self, memory, search_query: str = "") -> List[ScrapedDeal]:
         """
         Look up deals published on RSS feeds
         Return any new deals that are not already in the memory provided
         """
-        self.log("Scanner Agent is about to fetch deals from RSS feed")
+        if search_query:
+            self.log(f"Scanner Agent is searching RSS listings for: {search_query}")
+        else:
+            self.log("Scanner Agent is about to fetch deals from RSS feed")
         urls = [opp.deal.url for opp in memory]
-        scraped = ScrapedDeal.fetch()
+        scraped = ScrapedDeal.fetch(search_query=search_query)
         result = [scrape for scrape in scraped if scrape.url not in urls]
         self.log(f"Scanner Agent received {len(result)} deals not already scraped")
         return result
@@ -56,14 +59,16 @@ class ScannerAgent(Agent):
         user_prompt += self.USER_PROMPT_SUFFIX
         return user_prompt
 
-    def scan(self, memory: List[str] = []) -> Optional[DealSelection]:
+    def scan(
+        self, memory: List[str] = [], search_query: str = ""
+    ) -> Optional[DealSelection]:
         """
         Call OpenAI to provide a high potential list of deals with good descriptions and prices
         Use StructuredOutputs to ensure it conforms to our specifications
         :param memory: a list of URLs representing deals already raised
         :return: a selection of good deals, or None if there aren't any
         """
-        scraped = self.fetch_deals(memory)
+        scraped = self.fetch_deals(memory, search_query=search_query)
         if scraped:
             user_prompt = self.make_user_prompt(scraped)
             self.log("Scanner Agent is calling OpenAI using Structured Outputs")
